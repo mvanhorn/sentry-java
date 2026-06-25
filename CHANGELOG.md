@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Improvements
+
+- Lazily allocate the `ReentrantLock` backing `AutoClosableReentrantLock` to avoid eager lock allocations for SDK objects that never contend during `SentryAndroid.init` ([#5643](https://github.com/getsentry/sentry-java/pull/5643))
+
 ## 8.45.0
 
 ### Features
