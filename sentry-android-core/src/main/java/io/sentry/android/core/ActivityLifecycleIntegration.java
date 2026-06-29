@@ -45,7 +45,6 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.lang.ref.WeakReference;
 import java.util.Collections;
-import java.util.Date;
 import java.util.Map;
 import java.util.WeakHashMap;
 import java.util.concurrent.Future;
@@ -72,6 +71,7 @@ public final class ActivityLifecycleIntegration
   static final long APP_START_TO_UI_LOAD_CONTINUATION_MAX_GAP_NANOS = TimeUnit.MINUTES.toNanos(1);
   private static final String TRACE_ORIGIN = "auto.ui.activity";
   static final String APP_START_SCREEN_DATA = "app.vitals.start.screen";
+  static final String APP_START_REASON_DATA = "app.vitals.start.reason";
   static final String APP_START_TRACE_ORIGIN = "auto.app.start";
 
   private final @NotNull Application application;
@@ -94,7 +94,7 @@ public final class ActivityLifecycleIntegration
   private final @NotNull WeakHashMap<Activity, ISpan> ttfdSpanMap = new WeakHashMap<>();
   private final @NotNull WeakHashMap<Activity, ActivityLifecycleSpanHelper> activitySpanHelpers =
       new WeakHashMap<>();
-  private @NotNull SentryDate lastPausedTime = new SentryNanotimeDate(new Date(0), 0);
+  private @NotNull SentryDate lastPausedTime = new SentryNanotimeDate(0, 0);
   private @Nullable Future<?> ttfdAutoCloseFuture = null;
 
   // WeakHashMap isn't thread safe but ActivityLifecycleCallbacks is only called from the
@@ -140,6 +140,7 @@ public final class ActivityLifecycleIntegration
 
     if (performanceEnabled && this.options.isEnableStandaloneAppStartTracing()) {
       AppStartMetrics.getInstance().setHeadlessAppStartListener(this::onHeadlessAppStart);
+      addIntegrationToSdkVersion("StandaloneAppStart");
     }
 
     this.options.getLogger().log(SentryLevel.DEBUG, "ActivityLifecycleIntegration installed.");
@@ -286,6 +287,10 @@ public final class ActivityLifecycleIntegration
                       appStartSamplingDecision),
                   appStartTransactionOptions);
           appStartTransaction.setData(APP_START_SCREEN_DATA, activityName);
+          final @Nullable String appStartReason = AppStartMetrics.getInstance().getAppStartReason();
+          if (appStartReason != null) {
+            appStartTransaction.setData(APP_START_REASON_DATA, appStartReason);
+          }
         }
 
         // Continue either the foreground app.start above or an earlier headless app.start.
@@ -729,7 +734,7 @@ public final class ActivityLifecycleIntegration
 
   private void clear() {
     firstActivityCreated = false;
-    lastPausedTime = new SentryNanotimeDate(new Date(0), 0);
+    lastPausedTime = new SentryNanotimeDate(0, 0);
     activitySpanHelpers.clear();
   }
 
@@ -1002,6 +1007,10 @@ public final class ActivityLifecycleIntegration
             null);
 
     final @NotNull ITransaction transaction = scopes.startTransaction(txnContext, txnOptions);
+    final @Nullable String appStartReason = metrics.getAppStartReason();
+    if (appStartReason != null) {
+      transaction.setData(APP_START_REASON_DATA, appStartReason);
+    }
     metrics.setAppStartTraceId(transaction.getSpanContext().getTraceId());
     // Persist trace headers so a later ui.load can share traceId and sampleRand.
     metrics.setAppStartSentryTraceHeader(transaction.toSentryTrace().getValue());
